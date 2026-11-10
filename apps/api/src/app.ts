@@ -13,6 +13,7 @@ import { workflowRoutes } from './routes/workflow.routes.js';
 import { credentialRoutes } from './routes/credential.routes.js';
 import { connectorRoutes } from './routes/connector.routes.js';
 import { webhookTriggerRoutes } from './routes/webhook-trigger.routes.js';
+import { approvalRoutes } from './routes/approval.routes.js';
 
 export function buildApp(): FastifyInstance {
   // Initialize in-memory and database bridges for connectors (CRM, mock Email outbox, etc)
@@ -75,6 +76,7 @@ export function buildApp(): FastifyInstance {
   app.register(credentialRoutes);
   app.register(connectorRoutes);
   app.register(webhookTriggerRoutes);
+  app.register(approvalRoutes);
 
   return app;
 }
