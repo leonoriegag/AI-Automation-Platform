@@ -1,5 +1,5 @@
 /**
- * DAG Executor — Phase 3
+ * DAG Executor — Phase 3 & 7
  */
 
 import { logger, ExecutionBudgetExceededError } from '@nexora/shared';
@@ -73,15 +73,27 @@ export class DagExecutor {
       (graph.nodes ?? []).map((n) => [n.id, n])
     );
 
+    // Build incoming and outgoing edge lists
     type EdgeTarget = { target: string; label?: string };
     const edgesFrom = new Map<string, EdgeTarget[]>();
+    const edgesTo = new Map<string, { source: string; label?: string }[]>();
+
     for (const edge of graph.edges ?? []) {
-      const list = edgesFrom.get(edge.source) ?? [];
-      list.push({ target: edge.target, label: (edge as { label?: string }).label });
-      edgesFrom.set(edge.source, list);
+      const label = (edge as { label?: string }).label;
+
+      const outList = edgesFrom.get(edge.source) ?? [];
+      outList.push({ target: edge.target, label });
+      edgesFrom.set(edge.source, outList);
+
+      const inList = edgesTo.get(edge.target) ?? [];
+      inList.push({ source: edge.source, label });
+      edgesTo.set(edge.target, inList);
     }
 
-    const skippedNodes = new Set<string>();
+    const completedNodes = new Set<string>();
+    const failedNodes = new Set<string>();
+    const activeEdges = new Set<string>(); // "source->target"
+
     const steps: StepResult[] = [];
     const retryPolicy = this.options.retryPolicy ?? DEFAULT_RETRY_POLICY;
 
@@ -96,11 +108,23 @@ export class DagExecutor {
       const node = nodeMap.get(nodeId)!;
       const stepStart = Date.now();
 
-      if (skippedNodes.has(nodeId)) {
-        steps.push({ nodeId, nodeType: node.type, status: 'SKIPPED', attempts: 0, durationMs: 0 });
-        for (const { target } of edgesFrom.get(nodeId) ?? []) {
-          skippedNodes.add(target);
+      // Check incoming predecessors
+      const incoming = edgesTo.get(nodeId) ?? [];
+      let isExecutable = true;
+
+      if (incoming.length > 0) {
+        // A node can execute if AT LEAST ONE incoming edge is ACTIVE (i.e. taken by completed predecessor)
+        const hasActiveIncoming = incoming.some(
+          (edge) => activeEdges.has(`${edge.source}->${nodeId}`) && completedNodes.has(edge.source)
+        );
+
+        if (!hasActiveIncoming) {
+          isExecutable = false;
         }
+      }
+
+      if (!isExecutable) {
+        steps.push({ nodeId, nodeType: node.type, status: 'SKIPPED', attempts: 0, durationMs: 0 });
         continue;
       }
 
@@ -128,30 +152,33 @@ export class DagExecutor {
 
       if (lastError) {
         logger.error('Node failed after all retry attempts', undefined, { nodeId, attempts: attempt, error: lastError.message, executionId: context.executionId });
+        failedNodes.add(nodeId);
         steps.push({ nodeId, nodeType: node.type, status: 'FAILED', error: lastError.message, attempts: attempt, durationMs });
-        for (const { target } of edgesFrom.get(nodeId) ?? []) {
-          skippedNodes.add(target);
-        }
         continue;
       }
 
+      completedNodes.add(nodeId);
       context.nodeOutputs[nodeId] = output!.data;
       steps.push({ nodeId, nodeType: node.type, status: 'COMPLETED', output: output!, attempts: attempt, durationMs });
 
       logger.info(output!.message ?? 'Node completed', { nodeId, nodeType: node.type, durationMs, executionId: context.executionId });
 
-      // ── Condition branch handling ──────────────────────────────────────
+      // ── Condition branch & outgoing activation handling ────────────────
       const outputData = output!.data as Record<string, unknown> | null;
       const branch =
         outputData && typeof outputData === 'object' && 'branch' in outputData
           ? String(outputData['branch'])
           : null;
 
-      if (branch !== null) {
-        for (const { target, label } of edgesFrom.get(nodeId) ?? []) {
-          if (label !== undefined && label !== branch) {
-            skippedNodes.add(target);
+      for (const { target, label } of edgesFrom.get(nodeId) ?? []) {
+        // If node produced a branch decision, only activate matching edge
+        if (branch !== null && label !== undefined) {
+          if (label === branch) {
+            activeEdges.add(`${nodeId}->${target}`);
           }
+        } else {
+          // Regular unconditioned edge is always activated upon completion
+          activeEdges.add(`${nodeId}->${target}`);
         }
       }
     }

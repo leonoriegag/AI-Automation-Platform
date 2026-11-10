@@ -6,3 +6,4 @@ export * from './execution.js';
 export * from './approval.js';
 export * from './audit.js';
 export * from './crm.js';
+export * from './fixtures/index.js';

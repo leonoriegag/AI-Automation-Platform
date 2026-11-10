@@ -9,7 +9,7 @@ import { ExpressionEngine } from '../expression-engine.js';
 const ApprovalConfigSchema = z.object({
   title: z.string(),
   description: z.string().default(''),
-  assigneeRole: z.enum(['ADMIN', 'MANAGER', 'OPERATOR']).default('MANAGER'),
+  assigneeRole: z.enum(['ADMIN', 'MANAGER', 'OPERATOR', 'APPROVER', 'ORG_ADMIN']).default('MANAGER'),
   timeoutMs: z.number().int().positive().default(172_800_000),
 });
 

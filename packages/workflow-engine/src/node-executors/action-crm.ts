@@ -10,7 +10,7 @@ const CrmConfigSchema = z.object({
   operation: z.enum([
     'create_contact', 'update_contact',
     'create_lead', 'update_lead',
-    'get_contact',
+    'get_contact', 'add_activity',
   ]),
   data: z.record(z.unknown()).default({}),
   recordId: z.string().optional(),
