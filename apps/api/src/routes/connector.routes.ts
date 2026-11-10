@@ -9,19 +9,19 @@ export async function connectorRoutes(app: FastifyInstance) {
     '/api/v1/connectors',
     { preHandler: [authenticate] },
     async () => {
-      const connectors = registry.getAll();
-      return connectors.map(c => ({
+      const connectors = registry.list();
+      return connectors.map((c) => ({
         id: c.id,
         name: c.name,
         category: c.category,
         description: c.description,
         credentialType: c.credentialType,
-        operations: Array.from(c.operations.values()).map(op => ({
+        operations: Array.from(c.operations.values()).map((op) => ({
           id: op.id,
           name: op.name,
           description: op.description,
-          isIdempotent: op.isIdempotent
-        }))
+          isIdempotent: op.isIdempotent,
+        })),
       }));
     }
   );

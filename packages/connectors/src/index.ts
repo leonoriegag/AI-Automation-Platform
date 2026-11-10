@@ -1,31 +1,18 @@
-import { z } from 'zod';
-import { CredentialType } from '@nexora/domain';
+export * from './types.js';
 
-export interface ExecutionContext {
-  organizationId: string;
-  executionId: string;
-  nodeId: string;
-  credentials?: Record<string, string>;
-}
+// Provider exports
+export * from './providers/http.connector.js';
+export * from './providers/webhook.connector.js';
+export * from './providers/email.connector.js';
+export * from './providers/slack.connector.js';
+export * from './providers/crm.connector.js';
 
-export interface ConnectorOperation<TConfig = any, TInput = any, TOutput = any> {
-  id: string;
-  name: string;
-  description: string;
-  inputSchema: z.ZodSchema<TInput>;
-  outputSchema: z.ZodSchema<TOutput>;
-  isIdempotent: boolean;
-  execute(context: ExecutionContext, config: TConfig, input: TInput): Promise<TOutput>;
-}
-
-export interface ConnectorDefinition {
-  id: string;
-  name: string;
-  category: 'api' | 'messaging' | 'crm' | 'ai' | 'storage';
-  description: string;
-  credentialType?: CredentialType | 'NONE';
-  operations: Map<string, ConnectorOperation>;
-}
+import type { ConnectorDefinition } from './types.js';
+import { httpConnector } from './providers/http.connector.js';
+import { webhookConnector } from './providers/webhook.connector.js';
+import { emailConnector } from './providers/email.connector.js';
+import { slackConnector } from './providers/slack.connector.js';
+import { crmConnector } from './providers/crm.connector.js';
 
 export class ConnectorRegistry {
   private static instance: ConnectorRegistry;
@@ -34,8 +21,18 @@ export class ConnectorRegistry {
   public static getInstance(): ConnectorRegistry {
     if (!ConnectorRegistry.instance) {
       ConnectorRegistry.instance = new ConnectorRegistry();
+      ConnectorRegistry.instance.registerDefaults();
     }
     return ConnectorRegistry.instance;
+  }
+
+  public registerDefaults(): void {
+    const defaults = [httpConnector, webhookConnector, emailConnector, slackConnector, crmConnector];
+    for (const c of defaults) {
+      if (!this.connectors.has(c.id)) {
+        this.connectors.set(c.id, c);
+      }
+    }
   }
 
   public register(connector: ConnectorDefinition): void {
@@ -49,14 +46,13 @@ export class ConnectorRegistry {
     return this.connectors.get(id);
   }
 
-  public getAll(): ConnectorDefinition[] {
-    return Array.from(this.connectors.values());
+  public getOperation(connectorId: string, operationId: string) {
+    const connector = this.connectors.get(connectorId);
+    return connector?.operations.get(operationId);
   }
 
-  public getOperation(connectorId: string, operationId: string): ConnectorOperation | undefined {
-    const connector = this.get(connectorId);
-    if (!connector) return undefined;
-    return connector.operations.get(operationId);
+  public list(): ConnectorDefinition[] {
+    return Array.from(this.connectors.values());
   }
 
   public clear(): void {

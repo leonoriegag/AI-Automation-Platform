@@ -3,16 +3,23 @@ import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
 import { env } from './config/env.js';
 import { AppError } from '@nexora/shared';
+import { prisma } from './plugins/prisma.js';
+import { initializeConnectorBridges } from './services/connector-bridges.js';
+
 import { healthRoutes } from './routes/health.routes.js';
 import { authRoutes } from './routes/auth.routes.js';
 import { organizationRoutes } from './routes/organization.routes.js';
 import { workflowRoutes } from './routes/workflow.routes.js';
 import { credentialRoutes } from './routes/credential.routes.js';
 import { connectorRoutes } from './routes/connector.routes.js';
+import { webhookTriggerRoutes } from './routes/webhook-trigger.routes.js';
 
 export function buildApp(): FastifyInstance {
+  // Initialize in-memory and database bridges for connectors (CRM, mock Email outbox, etc)
+  initializeConnectorBridges(prisma);
+
   const app = fastify({
-    logger: false, // We use structured logger or Fastify internal
+    logger: false,
     disableRequestLogging: true
   });
 
@@ -67,6 +74,7 @@ export function buildApp(): FastifyInstance {
   app.register(workflowRoutes);
   app.register(credentialRoutes);
   app.register(connectorRoutes);
+  app.register(webhookTriggerRoutes);
 
   return app;
 }
