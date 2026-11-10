@@ -1,0 +1,35 @@
+{
+  "name": "ai-automation-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NEXORA Operations — Enterprise AI Workflow Automation Platform",
+  "license": "MIT",
+  "author": "leonoriegag",
+  "scripts": {
+    "build": "pnpm -r --filter=./packages/* run build && pnpm --filter=@nexora/api run build",
+    "dev": "pnpm --filter=@nexora/api run dev",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:security": "vitest run tests/security",
+    "test:e2e": "vitest run tests/e2e",
+    "typecheck": "pnpm -r run typecheck",
+    "db:generate": "prisma generate --schema=database/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema=database/schema.prisma --name init",
+    "db:push": "prisma db push --schema=database/schema.prisma",
+    "db:seed": "tsx database/seeds/seed.ts",
+    "db:studio": "prisma studio --schema=database/schema.prisma"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "dotenv": "^16.4.7",
+    "prisma": "^6.3.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5",
+    "zod": "^3.24.2"
+  }
+}
