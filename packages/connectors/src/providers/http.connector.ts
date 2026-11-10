@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { SSRFError } from '@nexora/shared';
 import type { ConnectorDefinition, ConnectorOperation, ExecutionContext } from '../types.js';
 
-// Reserved / Private IP checks
+// Reserved / Private IP checks & cloud metadata defenses
 const PRIVATE_IP_PATTERNS = [
   /^localhost$/i,
   /^127\.\d+\.\d+\.\d+$/,
@@ -11,10 +11,35 @@ const PRIVATE_IP_PATTERNS = [
   /^192\.168\.\d+\.\d+$/,
   /^\[::1\]$/,
   /^::1$/,
+  /^\[::\]$/,
+  /^::$/,
   /^0\.0\.0\.0$/,
   /^169\.254\.\d+\.\d+$/,
+  /^\[::ffff:127\.\d+\.\d+\.\d+\]$/i,
+  /^::ffff:127\.\d+\.\d+\.\d+$/i,
+  /^\[::ffff:10\.\d+\.\d+\.\d+\]$/i,
+  /^::ffff:10\.\d+\.\d+\.\d+$/i,
+  /^\[::ffff:172\.(1[6-9]|2\d|3[01])\.\d+\.\d+\]$/i,
+  /^::ffff:172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/i,
+  /^\[::ffff:192\.168\.\d+\.\d+\]$/i,
+  /^::ffff:192\.168\.\d+\.\d+$/i,
+  /^\[::ffff:169\.254\.\d+\.\d+\]$/i,
+  /^::ffff:169\.254\.\d+\.\d+$/i,
   /^fd[0-9a-f]{2}:/i,
+  /^\[fd[0-9a-f]{2}:/i,
+  /^fc[0-9a-f]{2}:/i,
+  /^\[fc[0-9a-f]{2}:/i,
+  /^fe80:/i,
+  /^\[fe80:/i,
+  /^metadata\.google\.internal$/i,
+  /^metadata$/i,
+  /^instance-data$/i,
 ];
+
+const RESTRICTED_PORTS = new Set([
+  '21', '22', '23', '25', '110', '135', '137', '138', '139', '445',
+  '2375', '2376', '2379', '3306', '5432', '5433', '6379', '11211', '27017'
+]);
 
 export function validateSafeUrl(rawUrl: string): URL {
   let parsed: URL;
@@ -28,12 +53,29 @@ export function validateSafeUrl(rawUrl: string): URL {
     throw new SSRFError(`Disallowed URL protocol: "${parsed.protocol}"`);
   }
 
+  let hostToCheck = parsed.hostname;
+
+  // WHATWG URL parser formats IPv4-mapped IPv6 as [::ffff:hex:hex]
+  const ipv4MappedMatch = hostToCheck.match(/^\[?::ffff:([0-9a-f]+):([0-9a-f]+)\]?$/i);
+  if (ipv4MappedMatch) {
+    const n1 = parseInt(ipv4MappedMatch[1], 16);
+    const n2 = parseInt(ipv4MappedMatch[2], 16);
+    const decodedIp = [(n1 >> 8) & 0xff, n1 & 0xff, (n2 >> 8) & 0xff, n2 & 0xff].join('.');
+    hostToCheck = decodedIp;
+  }
+
   for (const pattern of PRIVATE_IP_PATTERNS) {
-    if (pattern.test(parsed.hostname)) {
+    if (pattern.test(parsed.hostname) || pattern.test(hostToCheck)) {
       throw new SSRFError(
         `SSRF Guard: Request to private or loopback target "${parsed.hostname}" is forbidden.`
       );
     }
+  }
+
+  if (parsed.port && RESTRICTED_PORTS.has(parsed.port)) {
+    throw new SSRFError(
+      `SSRF Guard: Request to restricted port "${parsed.port}" is forbidden.`
+    );
   }
 
   return parsed;
